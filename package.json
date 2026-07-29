@@ -1,0 +1,46 @@
+{
+  "name": "@netsepio/erebrus-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Erebrus gateway — agent onboarding (orgs, API keys, node tokens, VPN/Drop later)",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "erebrus-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NetSepio/erebrus-mcp.git"
+  },
+  "keywords": [
+    "erebrus",
+    "mcp",
+    "netsepio",
+    "vpn",
+    "depin"
+  ]
+}
