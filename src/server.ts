@@ -7,6 +7,7 @@ import { registerAuthTools } from "./tools/auth.js";
 import { registerSessionHealthTools } from "./tools/session_health.js";
 import { registerOrgTools } from "./tools/org.js";
 import { registerNodeTools } from "./tools/nodes.js";
+import { registerVpnTools } from "./tools/vpn.js";
 import type { ToolContext } from "./tools/context.js";
 
 export const VERSION = "0.2.0";
@@ -25,9 +26,9 @@ export function createErebrusServer(
     {
       instructions: [
         "Erebrus gateway MCP for agent self-onboarding.",
-        "Auth: auth_wallet_challenge → sign → auth_wallet_complete, or auth_email_login_start → OTP → auth_email_login_verify.",
-        "Session stores the user PASETO; EREBRUS_BEARER_TOKEN is optional env fallback.",
-        "Blocked: admin, rank, leaderboard, perks, social, deep firewall rules, billing webhooks.",
+        "Auth via wallet/email tools; session stores user PASETO.",
+        "VPN tools available after login.",
+        "Blocked: admin, rank, leaderboard, perks, social, deep firewall rules.",
       ].join(" "),
     },
   );
@@ -37,5 +38,6 @@ export function createErebrusServer(
   registerAuthTools(ctx);
   registerOrgTools(ctx);
   registerNodeTools(ctx);
+  registerVpnTools(ctx);
   return server;
 }
