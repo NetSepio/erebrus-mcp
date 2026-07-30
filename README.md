@@ -2,15 +2,21 @@
 
 MCP server so **agents** can onboard onto [Erebrus](https://erebrus.io): authenticate (wallet or email), create orgs, mint API keys and node registration tokens, run nodes (via install plan + registration token), provision VPN clients, and use Drop — against the public gateway API.
 
-**Supported transport: stdio only** (spawned by Grok, Cursor, Claude Code, etc.).  
-HTTP transport code may exist in-tree for experiments; it is **not** the supported agent path for v0.2.
+### Transports
+
+| Transport | When to use |
+|-----------|-------------|
+| **stdio** (default) | Most agents/IDEs — Grok, Cursor, Claude Code spawn the process |
+| **HTTP** (local) | Allowed — agent or tooling connects to a local MCP URL (`/mcp`) |
+
+Both share the same tools and session auth (wallet/email). You do **not** need a remote hosted MCP for agents; local stdio or local HTTP is enough. Dockerfile/compose ship the binary for packaging (`stdio` by default; pass `--http` if you want a local HTTP listener).
 
 **Not exposed:** admin, leaderboard/rank/perks/social, deep firewall rule editing, billing webhooks.
 
-## Quick start (stdio)
+## Quick start (stdio — default)
 
 ```bash
-# from npm (after publish)
+# from npm (once published)
 npx -y @netsepio/erebrus-mcp
 
 # from clone
@@ -53,6 +59,37 @@ env = { EREBRUS_GATEWAY_URL = "https://gateway.erebrus.io" }
 ```
 
 Agents authenticate with tools (wallet or email). No env token required for interactive use.
+
+## Local HTTP (optional)
+
+Agents may run the MCP as a **local HTTP** server and connect with a URL transport:
+
+```bash
+# from clone
+npm run build
+node dist/index.js --http
+# or: MCP_TRANSPORT=http MCP_PORT=3100 node dist/index.js
+
+# Docker image, HTTP mode
+docker run --rm -p 3100:3100 \
+  -e EREBRUS_GATEWAY_URL=https://gateway.erebrus.io \
+  ghcr.io/netsepio/erebrus-mcp:latest \
+  --http
+```
+
+- Endpoint: `http://127.0.0.1:3100/mcp`  
+- Health: `http://127.0.0.1:3100/healthz`  
+- Optional gate: `MCP_AUTH_TOKEN` → clients send `Authorization: Bearer <token>`  
+
+Example Grok remote-style config against **localhost**:
+
+```toml
+[mcp_servers.erebrus_http]
+url = "http://127.0.0.1:3100/mcp"
+# headers = { Authorization = "Bearer <MCP_AUTH_TOKEN>" }  # if set
+```
+
+Session auth to the **Erebrus gateway** is still via wallet/email tools (or optional `EREBRUS_BEARER_TOKEN`). `MCP_AUTH_TOKEN` only locks the local MCP HTTP door if you set it.
 
 Optional env (see [`.env.example`](./.env.example)):
 
@@ -117,23 +154,30 @@ Successful login stores a **user PASETO in the MCP session** for that process.
 npm install
 npm run typecheck
 npm run build
-npm run dev        # stdio (supported)
+npm run dev              # stdio
+node dist/index.js --http  # local HTTP on :3100
 ```
 
 Requirements: Node.js ≥ 20.
 
 ## Docker image
 
-CI publishes `ghcr.io/netsepio/erebrus-mcp` for packaging. **stdio** is still the agent integration mode — run interactively and attach stdin/stdout:
+CI publishes `ghcr.io/netsepio/erebrus-mcp` (GHCR). Default entrypoint is **stdio**; pass `--http` for a local HTTP listener.
 
 ```bash
 docker pull ghcr.io/netsepio/erebrus-mcp:latest
+
+# stdio (attach stdin/stdout)
 docker run --rm -i \
   -e EREBRUS_GATEWAY_URL=https://gateway.erebrus.io \
   ghcr.io/netsepio/erebrus-mcp:latest
-```
 
-Point an MCP client’s `command`/`args` at a wrapper that runs the same image with `-i` if you prefer container isolation over `npx`.
+# local HTTP
+docker run --rm -p 3100:3100 \
+  -e EREBRUS_GATEWAY_URL=https://gateway.erebrus.io \
+  ghcr.io/netsepio/erebrus-mcp:latest \
+  --http
+```
 
 ## Security
 

@@ -1,13 +1,20 @@
-# Optional: run the stdio image for local smoke (attach -it).
-# Agent integration is still "npx @netsepio/erebrus-mcp" or node dist/index.js.
+# Local packaging smoke.
+#   stdio: docker compose run --rm erebrus-mcp
+#   HTTP:  MCP_TRANSPORT=http docker compose up  → http://127.0.0.1:3100/mcp
 services:
   erebrus-mcp:
     build: .
     image: ghcr.io/netsepio/erebrus-mcp:local
+    ports:
+      - "3100:3100"
     environment:
       EREBRUS_GATEWAY_URL: ${EREBRUS_GATEWAY_URL:-https://gateway.erebrus.io}
       EREBRUS_BEARER_TOKEN: ${EREBRUS_BEARER_TOKEN:-}
       EREBRUS_API_KEY: ${EREBRUS_API_KEY:-}
       EREBRUS_DEFAULT_ORG_ID: ${EREBRUS_DEFAULT_ORG_ID:-}
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-stdio}
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
     stdin_open: true
     tty: false
+    # For HTTP mode set MCP_TRANSPORT=http (command still default entrypoint;
+    # override with: command: ["--http"] if needed)
