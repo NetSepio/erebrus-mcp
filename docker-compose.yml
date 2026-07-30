@@ -1,19 +1,13 @@
-# Optional local/hosted MCP next to gateway consumers.
-# Secrets: use env file or compose secrets — do not commit real tokens.
+# Optional: run the stdio image for local smoke (attach -it).
+# Agent integration is still "npx @netsepio/erebrus-mcp" or node dist/index.js.
 services:
   erebrus-mcp:
     build: .
     image: ghcr.io/netsepio/erebrus-mcp:local
-    ports:
-      - "3100:3100"
     environment:
       EREBRUS_GATEWAY_URL: ${EREBRUS_GATEWAY_URL:-https://gateway.erebrus.io}
-      # Optional bootstrap; agents should prefer wallet/email login tools
       EREBRUS_BEARER_TOKEN: ${EREBRUS_BEARER_TOKEN:-}
       EREBRUS_API_KEY: ${EREBRUS_API_KEY:-}
       EREBRUS_DEFAULT_ORG_ID: ${EREBRUS_DEFAULT_ORG_ID:-}
-      # Protect the MCP endpoint in production
-      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
-      MCP_TRANSPORT: http
-      MCP_PORT: "3100"
-    restart: unless-stopped
+    stdin_open: true
+    tty: false

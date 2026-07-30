@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke entrypoint
+        run: |
+          node -e "
+            import('./dist/server.js').then(({ createErebrusServer }) => {
+              import('./dist/config.js').then(({ loadConfig }) => {
+                import('./dist/session.js').then(({ SessionStore }) => {
+                  const s = createErebrusServer(loadConfig(), new SessionStore());
+                  const n = Object.keys(s._registeredTools || {}).length;
+                  if (n < 10) throw new Error('too few tools: ' + n);
+                  console.log('ok', n, 'tools');
+                });
+              });
+            });
+          "

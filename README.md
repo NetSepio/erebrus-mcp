@@ -1,12 +1,71 @@
 # erebrus-mcp
 
-MCP server so **agents** can onboard onto [Erebrus](https://erebrus.io): authenticate (wallet or email), create orgs, mint API keys and node registration tokens, install nodes, provision VPN clients, and use Drop — against the public gateway API.
+MCP server so **agents** can onboard onto [Erebrus](https://erebrus.io): authenticate (wallet or email), create orgs, mint API keys and node registration tokens, run nodes (via install plan + registration token), provision VPN clients, and use Drop — against the public gateway API.
+
+**Supported transport: stdio only** (spawned by Grok, Cursor, Claude Code, etc.).  
+HTTP transport code may exist in-tree for experiments; it is **not** the supported agent path for v0.2.
 
 **Not exposed:** admin, leaderboard/rank/perks/social, deep firewall rule editing, billing webhooks.
 
+## Quick start (stdio)
+
+```bash
+# from npm (after publish)
+npx -y @netsepio/erebrus-mcp
+
+# from clone
+npm install && npm run build && node dist/index.js
+```
+
+### Grok
+
+```toml
+# ~/.grok/config.toml
+[mcp_servers.erebrus]
+command = "npx"
+args = ["-y", "@netsepio/erebrus-mcp"]
+env = { EREBRUS_GATEWAY_URL = "https://gateway.erebrus.io" }
+```
+
+Or pin a local build:
+
+```toml
+[mcp_servers.erebrus]
+command = "node"
+args = ["/absolute/path/to/erebrus-mcp/dist/index.js"]
+env = { EREBRUS_GATEWAY_URL = "https://gateway.erebrus.io" }
+```
+
+### Cursor / Claude Code
+
+```json
+{
+  "mcpServers": {
+    "erebrus": {
+      "command": "npx",
+      "args": ["-y", "@netsepio/erebrus-mcp"],
+      "env": {
+        "EREBRUS_GATEWAY_URL": "https://gateway.erebrus.io"
+      }
+    }
+  }
+}
+```
+
+Agents authenticate with tools (wallet or email). No env token required for interactive use.
+
+Optional env (see [`.env.example`](./.env.example)):
+
+| Env | Use |
+|-----|-----|
+| `EREBRUS_GATEWAY_URL` | Gateway base (default `https://gateway.erebrus.io`) |
+| `EREBRUS_BEARER_TOKEN` | Optional pre-seeded user PASETO (CI/operators only) |
+| `EREBRUS_API_KEY` | Org API key — today only `/api/v2/org/*` (VPN clients + usage) |
+| `EREBRUS_DEFAULT_ORG_ID` | Default `org_id` when tools omit it |
+
 ## Auth model
 
-Agents **should log in via tools**, not a pre-shared secret:
+Agents **log in via tools**, not a pre-shared MCP secret:
 
 | Flow | Tools |
 |------|--------|
@@ -15,15 +74,16 @@ Agents **should log in via tools**, not a pre-shared secret:
 | Import | `auth_import_token` (existing PASETO) |
 | Status | `auth_status`, `auth_methods`, `auth_logout` |
 
-Successful login stores a **user PASETO in the MCP session**.  
-`EREBRUS_BEARER_TOKEN` is an **optional env fallback** for operators/CI only.
+Successful login stores a **user PASETO in the MCP session** for that process.  
+`EREBRUS_BEARER_TOKEN` is an **optional env fallback** only.
 
-| Credential | Env | Use |
-|------------|-----|-----|
-| Session PASETO | (from auth tools) | Orgs, keys, node tokens, VPN, Drop |
+| Credential | Source | Use |
+|------------|--------|-----|
+| Session PASETO | auth tools | Orgs, keys, node tokens, VPN, Drop |
 | Env PASETO | `EREBRUS_BEARER_TOKEN` | Fallback if no session login |
-| Org API key | `EREBRUS_API_KEY` | `/api/v2/org/*` only (VPN clients + usage) today |
-| Default org | `EREBRUS_DEFAULT_ORG_ID` | Optional default `org_id` |
+| Org API key | `EREBRUS_API_KEY` | `/api/v2/org/*` only (VPN/usage) until gateway expands scopes |
+
+**Agent responsibilities outside MCP:** wallet signing or reading email OTP; choosing a VPS and running the install command from `node_install_plan` with the registration token.
 
 ## Tool map
 
@@ -44,12 +104,12 @@ Successful login stores a **user PASETO in the MCP session**.
 
 ## Suggested agent flow
 
-1. `auth_methods` / `auth_wallet_challenge` (or email login)
-2. `whoami` → `org_create` / `org_list`
-3. `apikey_create` (store secret offline)
-4. `node_registration_token_create` → `node_install_plan` → run on host
-5. `vpn_client_create` + `vpn_client_get_config`
-6. Drop: `drop_nodes_list` → reserve → upload content
+1. `auth_methods` → wallet or email login tools  
+2. `whoami` → `org_create` / `org_list`  
+3. Optional `apikey_create` (store secret offline)  
+4. `node_registration_token_create` → `node_install_plan` → run installer on the agent’s chosen VPS  
+5. `vpn_client_create` + `vpn_client_get_config`  
+6. Drop: `drop_nodes_list` → reserve → upload content  
 
 ## Develop
 
@@ -57,47 +117,37 @@ Successful login stores a **user PASETO in the MCP session**.
 npm install
 npm run typecheck
 npm run build
-npm run dev        # stdio
-npm run dev:http   # http://0.0.0.0:3100/mcp
+npm run dev        # stdio (supported)
 ```
 
-## Grok / Cursor (stdio)
+Requirements: Node.js ≥ 20.
 
-```toml
-[mcp_servers.erebrus]
-command = "node"
-args = ["/absolute/path/to/erebrus-mcp/dist/index.js"]
-env = { EREBRUS_GATEWAY_URL = "https://gateway.erebrus.io" }
-```
+## Docker image
 
-Agents log in with tools; no token required in env for interactive use.
-
-## Hosted HTTP
+CI publishes `ghcr.io/netsepio/erebrus-mcp` for packaging. **stdio** is still the agent integration mode — run interactively and attach stdin/stdout:
 
 ```bash
-MCP_AUTH_TOKEN=change-me npm run start:http
-# or
-docker compose up --build
+docker pull ghcr.io/netsepio/erebrus-mcp:latest
+docker run --rm -i \
+  -e EREBRUS_GATEWAY_URL=https://gateway.erebrus.io \
+  ghcr.io/netsepio/erebrus-mcp:latest
 ```
 
-- MCP endpoint: `POST/GET/DELETE /mcp`
-- Health: `GET /healthz`
-- Set `MCP_AUTH_TOKEN` in production (client sends `Authorization: Bearer …`)
-- Each MCP session has its own auth session store
-
-```toml
-[mcp_servers.erebrus_http]
-url = "https://mcp.example.com/mcp"
-headers = { Authorization = "Bearer change-me" }
-```
+Point an MCP client’s `command`/`args` at a wrapper that runs the same image with `-i` if you prefer container isolation over `npx`.
 
 ## Security
 
-- HTTP client path allowlist blocks admin/rank/social/firewall-rules/referrals.
-- One-time secrets (`api_key`, `ere_reg_*`, PASETO) — store offline; avoid chat logs.
-- Wallet signing is **outside** this server (agent/host wallet or human).
-- Drop upload via MCP is capped at ~15MB base64 payload.
+- HTTP client path allowlist blocks admin/rank/social/firewall-rules/referrals.  
+- One-time secrets (`api_key`, `ere_reg_*`, PASETO) — store offline; avoid chat logs.  
+- Drop upload via MCP is capped at ~15MB base64 payload.  
+- Do not commit `.env` or long-lived tokens.  
+
+## CI
+
+- **CI** — typecheck + build on push/PR to `main`  
+- **Docker** — build/push `ghcr.io/netsepio/erebrus-mcp` on `main` and version tags  
+- **npm** — publish `@netsepio/erebrus-mcp` on `v*` tags when `NPM_TOKEN` is set  
 
 ## License
 
-MIT (see `LICENSE`).
+MIT (see [`LICENSE`](./LICENSE)).
