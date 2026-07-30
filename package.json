@@ -1,7 +1,7 @@
 {
   "name": "@netsepio/erebrus-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for Erebrus gateway — agent onboarding (orgs, API keys, node tokens, VPN/Drop later)",
+  "version": "0.2.0",
+  "description": "MCP server for Erebrus gateway — agent self-auth, orgs, API keys, nodes, VPN, Drop",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -11,12 +11,16 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "Dockerfile",
+    "docker-compose.yml"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "start:http": "node dist/index.js --http",
     "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/index.ts --http",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build"
   },
@@ -28,6 +32,7 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"

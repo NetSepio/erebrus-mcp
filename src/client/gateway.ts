@@ -1,4 +1,5 @@
 import type { Config } from "../config.js";
+import type { SessionStore } from "../session.js";
 
 export class GatewayError extends Error {
   constructor(
@@ -18,27 +19,35 @@ export interface RequestOptions {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
-  /** Which credential to send. Default auto: bearer if set, else api_key. */
+  /** Raw body (e.g. binary upload). Mutually exclusive with JSON body. */
+  rawBody?: ArrayBuffer | Uint8Array | Buffer;
+  contentType?: string;
   auth?: AuthPreference;
-  /** Override Accept / extra headers */
   headers?: Record<string, string>;
+  /** Return response as text/bytes instead of JSON */
+  responseType?: "json" | "text" | "arrayBuffer";
 }
 
-/**
- * Thin HTTPS client for gateway.erebrus.io.
- * Path allowlist is enforced so tools cannot reach admin/rank/social by accident.
- */
 export class GatewayClient {
-  constructor(private readonly cfg: Config) {}
+  constructor(
+    private readonly cfg: Config,
+    private readonly session: SessionStore,
+  ) {}
 
   get config(): Config {
     return this.cfg;
   }
 
+  get sessionStore(): SessionStore {
+    return this.session;
+  }
+
   async request<T = unknown>(opts: RequestOptions): Promise<T> {
     assertPathAllowed(opts.path);
 
-    const url = new URL(opts.path.startsWith("http") ? opts.path : `${this.cfg.gatewayUrl}${opts.path}`);
+    const url = new URL(
+      opts.path.startsWith("http") ? opts.path : `${this.cfg.gatewayUrl}${opts.path}`,
+    );
     if (opts.query) {
       for (const [k, v] of Object.entries(opts.query)) {
         if (v === undefined) continue;
@@ -47,33 +56,66 @@ export class GatewayClient {
     }
 
     const headers: Record<string, string> = {
-      Accept: "application/json",
-      "User-Agent": "erebrus-mcp/0.1.0",
+      Accept: opts.responseType === "arrayBuffer" ? "*/*" : "application/json",
+      "User-Agent": "erebrus-mcp/0.2.0",
       ...opts.headers,
     };
 
     const auth = opts.auth ?? "auto";
-    if (auth === "bearer" || (auth === "auto" && this.cfg.bearerToken)) {
-      if (!this.cfg.bearerToken) {
-        throw new GatewayError("EREBRUS_BEARER_TOKEN is required for this operation", 401, null);
+    const bearer = this.session.getBearer();
+    const apiKey = this.session.getApiKey();
+
+    if (auth === "bearer" || (auth === "auto" && bearer)) {
+      if (!bearer) {
+        throw new GatewayError(
+          "Not authenticated. Use auth_wallet_* / auth_email_* tools, or set EREBRUS_BEARER_TOKEN.",
+          401,
+          null,
+        );
       }
-      headers.Authorization = `Bearer ${this.cfg.bearerToken}`;
-    } else if (auth === "api_key" || (auth === "auto" && this.cfg.apiKey && !this.cfg.bearerToken)) {
-      if (!this.cfg.apiKey) {
+      headers.Authorization = `Bearer ${bearer}`;
+    } else if (auth === "api_key" || (auth === "auto" && apiKey && !bearer)) {
+      if (!apiKey) {
         throw new GatewayError("EREBRUS_API_KEY is required for this operation", 401, null);
       }
-      headers["X-Api-Key"] = this.cfg.apiKey;
+      headers["X-Api-Key"] = apiKey;
     }
 
-    if (opts.body !== undefined) {
+    let body: string | Uint8Array | Buffer | undefined;
+    if (opts.rawBody !== undefined) {
+      headers["Content-Type"] = opts.contentType ?? "application/octet-stream";
+      body =
+        opts.rawBody instanceof ArrayBuffer
+          ? Buffer.from(opts.rawBody)
+          : (opts.rawBody as Uint8Array | Buffer);
+    } else if (opts.body !== undefined) {
       headers["Content-Type"] = "application/json";
+      body = JSON.stringify(opts.body);
     }
 
     const res = await fetch(url, {
-      method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
+      method: opts.method ?? (body !== undefined ? "POST" : "GET"),
       headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body,
     });
+
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
+    if (opts.responseType === "arrayBuffer") {
+      if (!res.ok) {
+        const text = await res.text();
+        throw new GatewayError(text || `gateway ${res.status}`, res.status, text);
+      }
+      return (await res.arrayBuffer()) as T;
+    }
+
+    if (opts.responseType === "text") {
+      const text = await res.text();
+      if (!res.ok) throw new GatewayError(text || `gateway ${res.status}`, res.status, text);
+      return text as T;
+    }
 
     const text = await res.text();
     let parsed: unknown = null;
@@ -96,9 +138,6 @@ export class GatewayClient {
       throw new GatewayError(msg, res.status, parsed);
     }
 
-    if (res.status === 204) {
-      return undefined as T;
-    }
     return parsed as T;
   }
 
@@ -115,11 +154,11 @@ export class GatewayClient {
   }
 }
 
-/** Paths tools may call. Admin / rank / social / leaderboard / perks are excluded. */
 const ALLOWED_PREFIXES = [
   "/healthz",
   "/readyz",
   "/version",
+  "/api/v2/auth",
   "/api/v2/account/",
   "/api/v2/orgs",
   "/api/v2/nodes",
@@ -142,7 +181,7 @@ const DENIED_SUBSTRINGS = [
 ];
 
 export function assertPathAllowed(path: string): void {
-  const p = path.startsWith("http") ? new URL(path).pathname : path.split("?")[0] ?? path;
+  const p = path.startsWith("http") ? new URL(path).pathname : (path.split("?")[0] ?? path);
 
   for (const bad of DENIED_SUBSTRINGS) {
     if (p.includes(bad)) {
