@@ -9,6 +9,7 @@ import { registerOrgTools } from "./tools/org.js";
 import { registerNodeTools } from "./tools/nodes.js";
 import { registerVpnTools } from "./tools/vpn.js";
 import { registerDropTools } from "./tools/drop.js";
+import { registerEgressTools } from "./tools/egress.js";
 import type { ToolContext } from "./tools/context.js";
 
 export const VERSION = "0.2.0";
@@ -30,6 +31,7 @@ export function createErebrusServer(
         "Auth: auth_wallet_challenge → sign → auth_wallet_complete, or auth_email_login_start → OTP → auth_email_login_verify.",
         "Session stores the user PASETO; EREBRUS_BEARER_TOKEN is optional env fallback.",
         "Flow: auth → org_create → apikey_create → node_registration_token_create → node_install_plan → vpn/drop tools.",
+        "Agent egress: vpn_egress_start runs the tunnel here and returns a loopback proxy URL; vpn_egress_stop tears it down and deletes the client.",
         "Blocked: admin, rank, leaderboard, perks, social, deep firewall rules, billing webhooks.",
       ].join(" "),
     },
@@ -42,6 +44,7 @@ export function createErebrusServer(
   registerNodeTools(ctx);
   registerVpnTools(ctx);
   registerDropTools(ctx);
+  registerEgressTools(ctx);
 
   return server;
 }

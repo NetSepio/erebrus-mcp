@@ -16,6 +16,11 @@ export interface Config {
   httpHost: string;
   /** Optional shared secret for hosted MCP (Authorization: Bearer <this>) */
   mcpAuthToken?: string;
+  /**
+   * How many egress tunnels may run at once. A cap so a confused agent cannot
+   * fork-bomb tunnels, each of which holds a provisioned peer on a node.
+   */
+  egressMaxSessions: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,6 +33,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     httpPort: Number(env.MCP_PORT ?? env.PORT ?? 3100) || 3100,
     httpHost: env.MCP_HOST ?? "0.0.0.0",
     mcpAuthToken: emptyToUndef(env.MCP_AUTH_TOKEN),
+    egressMaxSessions: Math.max(1, Number(env.EREBRUS_EGRESS_MAX_SESSIONS ?? 2) || 2),
   };
 }
 

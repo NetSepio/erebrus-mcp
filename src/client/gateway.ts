@@ -58,6 +58,9 @@ export class GatewayClient {
     const headers: Record<string, string> = {
       Accept: opts.responseType === "arrayBuffer" ? "*/*" : "application/json",
       "User-Agent": "erebrus-mcp/0.2.0",
+      // Agent traffic is separable in gateway metrics from the first request,
+      // not retrofitted after the first abuse report.
+      "X-Erebrus-Client": "mcp",
       ...opts.headers,
     };
 
@@ -156,6 +159,10 @@ export class GatewayClient {
 
 const ALLOWED_PREFIXES = [
   "/healthz",
+  // Egress and prepaid billing. Easy to forget, and the symptom is a confusing
+  // 403 from our own client rather than from the gateway.
+  "/api/v2/regions",
+  "/api/v2/bootstrap",
   "/readyz",
   "/version",
   "/api/v2/auth",

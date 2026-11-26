@@ -99,6 +99,8 @@ Optional env (see [`.env.example`](./.env.example)):
 | `EREBRUS_BEARER_TOKEN` | Optional pre-seeded user PASETO (CI/operators only) |
 | `EREBRUS_API_KEY` | Org API key — today only `/api/v2/org/*` (VPN clients + usage) |
 | `EREBRUS_DEFAULT_ORG_ID` | Default `org_id` when tools omit it |
+| `EREBRUS_SINGBOX_PATH` | sing-box binary for agent egress (the Docker image bakes one in) |
+| `EREBRUS_EGRESS_MAX_SESSIONS` | Concurrent egress tunnels, default 2 |
 
 ## Auth model
 
@@ -136,8 +138,40 @@ Successful login stores a **user PASETO in the MCP session** for that process.
 ### VPN
 `vpn_client_list`, `vpn_client_create`, `vpn_client_get_config`, `vpn_client_delete`, `org_vpn_client_create`, `org_vpn_client_list`, `org_usage`
 
+### Agent egress
+`vpn_egress_start`, `vpn_egress_status`, `vpn_egress_stop`, `vpn_regions_list`
+
 ### Drop
 `drop_nodes_list`, `drop_upload_reserve`, `drop_upload_content`, `drop_upload_status`, `drop_files_list`, `drop_file_get`, `drop_file_delete`, `drop_usage`, `org_drop_files`, `org_drop_usage`
+
+## Agent egress
+
+`vpn_egress_start` provisions a VPN client, runs the tunnel in this process and
+returns a loopback proxy URL (`http://127.0.0.1:<port>`, also usable as
+`socks5h://`). It verifies the tunnel before returning by reading the egress IP
+through it, because an agent handed a proxy URL has no other way to know the
+tunnel carries traffic. `vpn_egress_stop` tears the tunnel down **and** deletes
+the provisioned client, so no peer slot is left held; the same cleanup runs if
+this process exits.
+
+Be precise about who sees what:
+
+| Observer | What they see |
+|-----|-----|
+| The destination | the Erebrus node's egress IP, in the region asked for — this is what unlocks geofenced and IP-blocked content |
+| The node operator | this host's IP, because this host dials the node. Two-hop closes that and is not implemented yet |
+| The local machine | everything. This is a local process; anything with root on the agent host sees the traffic and the keys |
+
+That is the whole claim. It is not anonymity.
+
+Use `socks5h://` or an HTTP `CONNECT`-capable client, not a client that resolves
+hostnames itself: a locally-resolved hostname tells the agent's own resolver
+every site it visits while the agent believes it is tunnelled.
+
+Needs a user session (the wallet/email login tools or `EREBRUS_BEARER_TOKEN`).
+An org API key alone is not enough today: the gateway exposes the client config
+only on the user route, so `vpn_egress_start` cannot fetch a credential bundle
+with `X-Api-Key`.
 
 ## Suggested agent flow
 
@@ -147,6 +181,7 @@ Successful login stores a **user PASETO in the MCP session** for that process.
 4. `node_registration_token_create` → `node_install_plan` → run installer on the agent’s chosen VPS  
 5. `vpn_client_create` + `vpn_client_get_config`  
 6. Drop: `drop_nodes_list` → reserve → upload content  
+7. Egress: `vpn_regions_list` → `vpn_egress_start` → use `proxy_url` → `vpn_egress_stop`  
 
 ## Develop
 

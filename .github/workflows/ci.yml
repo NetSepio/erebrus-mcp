@@ -25,6 +25,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test
+
+      # npm audit has no reachability analysis, so moderate findings in
+      # transitive dependencies would break unrelated pull requests. High and
+      # critical block; everything else is still printed in the log.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Build
         run: npm run build
 
