@@ -10,6 +10,8 @@
 - `vpn_egress_stop` deletes the provisioned client as well as killing the
   tunnel, and the same cleanup runs if this process exits or is killed.
 - `vpn_regions_list` says where an egress can come out.
+- Both dependencies are current, nine advisories are gone, and CI runs the
+  tests and blocks on a high or critical one.
 
 ### Added
 
@@ -57,6 +59,28 @@
   sees the node's IP, the node operator sees this host's IP, and anything with
   root on this machine sees everything. It is not anonymity and the README does
   not say it is.
+
+### Security
+
+- **Both production dependencies moved up, clearing nine advisories.**
+  `@modelcontextprotocol/sdk` ^1.30.0 -> ^1.32.2 and `zod` ^3.25 -> ^4.6.7.
+  Eight of the nine arrived through the SDK — one critical (`proxy-addr` trusting
+  IPv4-mapped IPv6 addresses), three more high ones (the SDK's own OAuth client
+  could send credentials to a server the authorization flow chose, experimental
+  tasks were not tied to the session that created them, `body-parser` and
+  `fast-uri`), and four moderate (`hono`, `@hono/node-server`, `ip-address`,
+  `qs`). The zod advisory needed the major bump, because every 3.x release can
+  be made to exhaust memory on an oversized collection; the SDK accepts
+  `^3.25 || ^4.0`, so there is still one deduplicated copy in the tree.
+  The migration needed no code change: all 44 tools still publish object
+  schemas, and `minLength`, `enum`, `format: email` and the integer bounds all
+  survive into the generated JSON Schema.
+- **CI runs the tests and fails on a high or critical advisory.** The workflow
+  typechecked, built and smoke-imported the server but never ran `npm test`, so
+  the suite was only ever green on whoever's machine last ran it. It now runs
+  the tests and `npm audit --omit=dev --audit-level=high`. Moderate findings
+  stay visible in the log rather than blocking, since npm audit has no
+  reachability analysis and would otherwise fail unrelated pull requests.
 
 ### Not yet
 
